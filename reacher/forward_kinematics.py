@@ -130,13 +130,14 @@ def fk_foot(joint_angles):
   Returns:
     4x4 matrix representing the pose of the end effector frame in the base frame
   """
-
+  joint_angles = np.array(joint_angles)
   elbow_frame = fk_elbow(joint_angles)
+
   end_effector_elbow_frame = np.matrix([[1, 0, 0, 0],
                          [0, 1, 0 , 0], 
                          [0, 0, 1, 0.13], 
                          [0, 0, 0, 1]])
   
   end_effector_frame = np.matmul(elbow_frame, end_effector_elbow_frame)
-
+  
   return end_effector_frame
