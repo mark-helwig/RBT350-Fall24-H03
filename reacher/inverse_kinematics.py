@@ -3,146 +3,93 @@ import numpy as np
 import copy
 from reacher import forward_kinematics
 
+# Constants (should match those in forward_kinematics)
 HIP_OFFSET = 0.0335
-UPPER_LEG_OFFSET = 0.10 # length of link 1
-LOWER_LEG_OFFSET = 0.13 # length of link 2
-TOLERANCE = 0.01 # tolerance for inverse kinematics
-PERTURBATION = 0.0001 # perturbation for finite difference method
-MAX_ITERATIONS = 10
+UPPER_LEG_OFFSET = 0.10   # length of link 1
+LOWER_LEG_OFFSET = 0.13   # length of link 2
 
-# def ik_cost(end_effector_pos, guess):
-#     """Calculates the inverse kinematics cost.
+# Inverse kinematics solver parameters
+TOLERANCE = 0.01        # Tolerance for convergence (in meters)
+PERTURBATION = 0.0001   # Perturbation size for finite difference approximation
+MAX_ITERATIONS = 10     # Maximum number of iterations
 
-#     This function computes the inverse kinematics cost, which represents the Euclidean
-#     distance between the desired end-effector position and the end-effector position
-#     resulting from the provided 'guess' joint angles.
-
-#     Args:
-#         end_effector_pos (numpy.ndarray), (3,): The desired XYZ coordinates of the end-effector.
-#             A numpy array with 3 elements.
-#         guess (numpy.ndarray), (3,): A guess at the joint angles to achieve the desired end-effector
-#             position. A numpy array with 3 elements.
-
-#     Returns:
-#         float: The Euclidean distance between end_effector_pos and the calculated end-effector
-#         position based on the guess.
-#     """
-#     # Initialize cost to zero
-#     cost = 0.0
-
-#     # Add your solution here.
-#     curr_pos = forward_kinematics.fk_foot(guess)[0:3,3] #first three elements of the fourt column
-#     cost = np.linalg.norm(end_effector_pos - curr_pos)
-#     return cost
-
-# def calculate_jacobian_FD(joint_angles, delta):
-#     """
-#     Calculate the Jacobian matrix using finite differences.
-
-#     This function computes the Jacobian matrix for a given set of joint angles using finite differences.
-
-#     Args:
-#         joint_angles (numpy.ndarray), (3,): The current joint angles. A numpy array with 3 elements.
-#         delta (float): The perturbation value used to approximate the partial derivatives.
-
-#     Returns:
-#         numpy.ndarray: The Jacobian matrix. A 3x3 numpy array representing the linear mapping
-#         between joint velocity and end-effector linear velocity.
-#     """
-
-#     J = np.zeros((3, 3))
-#     base_position = forward_kinematics.fk_foot(joint_angles)[0:3, 3] # first three elements of the fourt column
-#     # now we have the initi position
-
-#     # each joint angle is its own column
-#     for i in range(3):
-#         # Perturb the joint angle and compute the forward kinematics
-#         per_angles = joint_angles.copy()
-#         per_angles[i] += delta
-
-#         per_angles = forward_kinematics.fk_foot(per_angles)[0:3, 3]
-#         # finite difference approximation
-#         J[0:3,i] = np.array(((per_angles - base_position) / delta).reshape(3,))[0] # this is the finite difference approximation
-      
-#     return J
-
-# def calculate_inverse_kinematics(end_effector_pos, guess):
-#     """
-#     Calculate the inverse kinematics solution using the Newton-Raphson method.
-
-#     This function iteratively refines a guess for joint angles to achieve a desired end-effector position.
-#     It uses the Newton-Raphson method along with a finite difference Jacobian to find the solution.
-
-#     Args:
-#         end_effector_pos (numpy.ndarray): The desired XYZ coordinates of the end-effector.
-#             A numpy array with 3 elements.
-#         guess (numpy.ndarray): The initial guess for joint angles. A numpy array with 3 elements.
-
-#     Returns:
-#         numpy.ndarray: The refined joint angles that achieve the desired end-effector position.
-#     """
-
-#     np.set_printoptions(precision=20)
-
-#     previous_cost = np.inf
-#     for iters in range(MAX_ITERATIONS):
-#         J = calculate_jacobian_FD(guess, PERTURBATION) # Jacobian defined above
-#         current_position = np.array(forward_kinematics.fk_foot(guess)[0:3, 3].reshape(3,))[0] # first three elements of the fourt column
-#         # residual (difference between desired and current position)
-#         residual = (end_effector_pos - current_position)
-        
-#         # update the joint angles and the guess using the inverse of the Jacobian
-#         step = np.linalg.pinv(J) @ residual
-#         guess = (guess + step.reshape(3,)).flatten() # update guess
-
-#         # cost/convergence check
-#         cost = ik_cost(end_effector_pos, guess)
-        
-#         if abs(previous_cost - cost) < TOLERANCE:
-#             break
-        
-#         previous_cost = cost # need to check if cost is increasing?
-#     print(guess)
-#     return guess
-
-def get_translation(homogeneous_matrix):
-    return homogeneous_matrix[:3, 3] / homogeneous_matrix[3, 3]
-  
 def ik_cost(end_effector_pos, guess):
-    guess_pos_homo = forward_kinematics.fk_foot(guess)
-    guess_pos = get_translation(guess_pos_homo)
-    cost = np.linalg.norm(guess_pos-end_effector_pos)
+    """
+    Calculates the inverse kinematics cost, defined as the Euclidean distance
+    between the desired end-effector position and the actual end-effector position
+    computed from the current guess of joint angles.
+
+    Args:
+      end_effector_pos (numpy.ndarray): Desired XYZ coordinates of the end-effector.
+      guess (numpy.ndarray): Current guess for the joint angles [hip, shoulder, elbow].
+
+    Returns:
+      float: The Euclidean distance (cost).
+    """
+    forward_position = forward_kinematics.fk_foot(guess)[0:3, 3]
+    cost = np.linalg.norm(end_effector_pos - forward_position)
     return cost
-  
+
 def calculate_jacobian_FD(joint_angles, delta):
-    foot_pos0 = get_translation(forward_kinematics.fk_foot(joint_angles))
-    hip_rotates = joint_angles + [delta,0,0]
-    shoulder_rotates = joint_angles + [0,delta,0]
-    elbow_rotates = joint_angles + [0,0,delta]
-    hip_deltas = get_translation(forward_kinematics.fk_foot(hip_rotates)) - foot_pos0
-    shoulder_deltas = get_translation(forward_kinematics.fk_foot(shoulder_rotates)) - foot_pos0
-    elbow_deltas = get_translation(forward_kinematics.fk_foot(elbow_rotates)) - foot_pos0
-    J = np.column_stack([hip_deltas, shoulder_deltas, elbow_deltas]) / delta
+    """
+    Calculate the Jacobian matrix numerically using finite differences.
+
+    Each column i of the 3x3 Jacobian represents the change in the foot's XYZ
+    position with respect to a small change in joint_angles[i].
+
+    Args:
+      joint_angles (numpy.ndarray): The current joint angles (3 elements).
+      delta (float): The small perturbation added to compute finite differences.
+
+    Returns:
+      numpy.ndarray: The 3x3 Jacobian matrix.
+    """
+    J = np.zeros((3, 3))
+    current_pos = forward_kinematics.fk_foot(joint_angles)[0:3, 3]
+    for i in range(3):
+        perturbed_angles = np.array(joint_angles, dtype=float)
+        perturbed_angles[i] += delta
+        perturbed_pos = forward_kinematics.fk_foot(perturbed_angles)[0:3, 3]
+        # Compute the finite difference derivative for joint i.
+        J[:, i] = (perturbed_pos - current_pos) / delta
     return J
 
 def calculate_inverse_kinematics(end_effector_pos, guess):
-    cost = ik_cost(end_effector_pos, guess)
-    for iters in range(MAX_ITERATIONS):
-      J = calculate_jacobian_FD(guess, PERTURBATION)
-      foot_pos = np.array(get_translation(forward_kinematics.fk_foot(guess)).flatten())[0]
-      delta_pos = end_effector_pos - foot_pos
-      print('end_effector_pos',end_effector_pos)
-      print('delta_pos',delta_pos)
-      print('foot_pos',foot_pos)
-      delta_guess = np.array((np.linalg.pinv(J) @ delta_pos).flatten())[0]
-      print('guess',guess)
-      print('delta_guess',delta_guess)
-      guess += delta_guess
-      
-      prev_cost = cost
-      cost = ik_cost(end_effector_pos, guess)
-      if abs(prev_cost - cost) < TOLERANCE:
-          break
-      print('working')
-    print('done',guess)
+    """
+    Compute joint angles that achieve the desired end-effector position using
+    the Newton-Raphson method.
+
+    In each iteration the algorithm:
+      1. Computes the current end-effector position via forward kinematics.
+      2. Evaluates the residual (error) between the current and desired positions.
+      3. Computes a Jacobian matrix (using finite differences).
+      4. Updates the joint angles using the pseudoinverse of the Jacobian.
+
+    The iterations stop when the change in the cost between iterations is below TOLERANCE
+    or MAX_ITERATIONS is reached.
+
+    Args:
+      end_effector_pos (numpy.ndarray): Desired XYZ position of the end-effector.
+      guess (numpy.ndarray): Initial guess for the joint angles [hip, shoulder, elbow].
+
+    Returns:
+      numpy.ndarray: Refined joint angles that (approximately) achieve the desired position.
+    """
+    previous_cost = np.inf
+    for it in range(MAX_ITERATIONS):
+        current_transform = forward_kinematics.fk_foot(guess)
+        current_pos = current_transform[0:3, 3]
+        residual = end_effector_pos - current_pos
+        cost = np.linalg.norm(residual)
+        # Check for convergence; if cost changes less than TOLERANCE, we stop.
+        if abs(previous_cost - cost) < TOLERANCE:
+            break
+        previous_cost = cost
+        
+        # Compute the Jacobian matrix via finite differences.
+        J = calculate_jacobian_FD(guess, PERTURBATION)
+        # Compute the change in joint angles using the Moore-Penrose pseudoinverse.
+        delta_theta = np.dot(np.linalg.pinv(J), residual)
+        # Update the joint angle guess.
+        guess = guess + delta_theta
     return guess
