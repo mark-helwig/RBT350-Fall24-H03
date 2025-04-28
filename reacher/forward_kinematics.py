@@ -7,6 +7,22 @@ HIP_OFFSET = 0.0335            # Shoulder offset from hip (in meters)
 UPPER_LEG_OFFSET = 0.10        # Length of link 1 (upper leg)
 LOWER_LEG_OFFSET = 0.13        # Length of link 2 (lower leg)
 
+def get_axis_angle(T):
+    
+    # Extract the rotation matrix from the transformation matrix
+    R = T[0:3, 0:3]
+    
+    # Calculate the angle of rotation using the trace of the rotation matrix
+    angle = math.acos((np.trace(R) - 1) / 2)
+    
+    # Calculate the axis of rotation using the skew-symmetric matrix
+    if angle == 0:
+        axis = np.array([0, 0, 0])
+    else:
+        axis = np.array([R[2, 1] - R[1, 2], R[0, 2] - R[2, 0], R[1, 0] - R[0, 1]]) / (2 * math.sin(angle))
+    
+    return axis, angle
+
 def rotation_matrix(axis, angle):
     
     # Create the skew-symmetric matrix K from the axis.
