@@ -16,6 +16,7 @@ Requires-Dist: pybullet==3.2.6
 Requires-Dist: pypot==5.0.2
 Requires-Dist: numpy==1.24.4
 Requires-Dist: absl-py==2.1.0
+Requires-Dist: RPi.GPIO==0.7.1
 
 # RBT350-Fall24-H03
 

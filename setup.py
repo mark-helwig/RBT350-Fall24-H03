@@ -38,6 +38,7 @@ setup(
         "pypot==5.0.2",
         "numpy==1.24.4",
         "absl-py==2.1.0",
+        "RPi.GPIO==0.7.1",
     ],
     classifiers=[
         "Development Status :: 4 - Beta",
