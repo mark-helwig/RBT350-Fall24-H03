@@ -1,5 +1,9 @@
 import time
 
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pybullet as p
 import numpy as np
 np.set_printoptions(suppress=True, precision=3)
@@ -9,6 +13,7 @@ from absl import flags
 from reacher import forward_kinematics
 from reacher import inverse_kinematics
 from reacher import reacher_sim_utils
+from reacher import ultrasonic
 from dynamixel_interface import Reacher
 
 
@@ -100,7 +105,6 @@ def main(argv):
 				sim_joint_positions.append(p.getJointState(reacher_sim, joint_id)[0])
 			sim_joint_positions = np.array(sim_joint_positions)
 			
-			
 			# If IK is enabled, update joint angles based off of goal XYZ position
 			if FLAGS.ik:
 				ret = inverse_kinematics.calculate_inverse_kinematics(xyz, sim_joint_positions[:3])
@@ -113,6 +117,11 @@ def main(argv):
 					# If the error between the goal foot position and the position of the foot obtained from the IK solution is too large,
 					# don't set the joint angles of the robot to the angles obtained from IK 
 					pos = forward_kinematics.fk_foot(sim_target_joint_positions[:3])[:3,3]
+					# x = current - (.1 - distance/100)
+					# y = -.0335
+					# z = sqrt((0.1)**2 - x**2)+0.13 in meters
+					xyz = np.array([pos[0] - (0.1-ultrasonic.distance()/100), -0.0335, np.sqrt((0.1)**2 - pos[0]**2) + 0.13])
+					
 					if np.linalg.norm(np.asarray(pos) - xyz) > 0.05:
 						sim_target_joint_positions = np.zeros_like(sim_target_joint_positions)
 						if flags.FLAGS.set_joint_positions:
