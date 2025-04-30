@@ -25,8 +25,6 @@ def calculate_jacobian_FD(joint_angles, delta):
     return J
 
 def calculate_inverse_kinematics(end_effector_pos, guess):
-    
-    
     for it in range(MAX_ITERATIONS):
         current_transform = forward_kinematics.fk_foot(guess)
         current_pos = current_transform[0:3, 3]
