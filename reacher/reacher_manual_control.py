@@ -82,7 +82,7 @@ def main(argv):
 		if time.time() - last_command > UPDATE_DT:
 			last_command = time.time()
 			counter += 1
-
+			slider_values = np.zeros(len(param_ids))
 			# Read the slider values
 			try:
 				slider_values = np.array([p.readUserDebugParameter(id) for id in param_ids])
