@@ -37,4 +37,5 @@ def calculate_inverse_kinematics(end_effector_pos, guess):
         J = calculate_jacobian_FD(guess, PERTURBATION)
         delta_theta = np.dot(np.linalg.pinv(J), residual)
         guess = guess + delta_theta
+    print(guess)
     return guess

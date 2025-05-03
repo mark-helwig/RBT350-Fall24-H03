@@ -16,9 +16,18 @@ from reacher import reacher_sim_utils
 from reacher import ultrasonic
 from dynamixel_interface import Reacher
 
+
+flags.DEFINE_bool("run_on_robot", False, "Whether to run on robot or in simulation.")
+flags.DEFINE_bool("ik"          , False, "Whether to control arms through cartesian coordinates(IK) or joint angles")
+flags.DEFINE_list("set_joint_positions", [], "List of joint angles to set at initialization.")
+flags.DEFINE_bool("real_to_sim", False, "Whether we want to command the sim robot by moving the real robot")
+flags.DEFINE_bool("sim_to_real", False, "Whether we want to command the real robot by moving the sim robot (by moving the slider)")
+FLAGS = flags.FLAGS
+
 UPDATE_DT = 0.01  # seconds
 
 def main(argv):
+	run_on_robot = FLAGS.run_on_robot
 	reacher_sim = reacher_sim_utils.load_reacher()
 
 	# Sphere markers for the students' FK solutions
@@ -28,11 +37,12 @@ def main(argv):
 	target_sphere_id   = reacher_sim_utils.create_debug_sphere([1, 1, 1, 1], radius=0.01)
 
 	joint_ids = reacher_sim_utils.get_joint_ids(reacher_sim)
-	param_ids = reacher_sim_utils.get_param_ids(reacher_sim, True)
+	param_ids = reacher_sim_utils.get_param_ids(reacher_sim, FLAGS.ik)
 	reacher_sim_utils.zero_damping(reacher_sim)
 
 	p.setPhysicsEngineParameter(numSolverIterations=10)
 
+	# Set up physical robot if we're using it
 	sim_to_real = False
 	real_to_sim = False
 	if run_on_robot:
@@ -40,10 +50,7 @@ def main(argv):
 		time.sleep(0.25)
 		real_to_sim = FLAGS.real_to_sim
 		sim_to_real = FLAGS.sim_to_real
-
-	# Set up physical robot if we're using it
-	#reacher_real = Reacher()
-	#time.sleep(0.25)
+		# reacher_real.reset()
 
 	# Control Loop Variables
 	p.setRealTimeSimulation(1)
@@ -76,10 +83,6 @@ def main(argv):
 	# Main loop
 	while (True):
 
-		ultrasonic.read_arduino()
-
-		run_on_robot = FLAGS.run_on_robot
-
 		# Control loop
 		if time.time() - last_command > UPDATE_DT:
 			last_command = time.time()
@@ -90,9 +93,12 @@ def main(argv):
 				slider_values = np.array([p.readUserDebugParameter(id) for id in param_ids])
 			except:
 				pass
-  
-			xyz = slider_values
-			p.resetBasePositionAndOrientation(target_sphere_id, posObj=xyz, ornObj=[0, 0, 0, 1])
+			if FLAGS.ik:
+				xyz = slider_values
+				p.resetBasePositionAndOrientation(target_sphere_id, posObj=xyz, ornObj=[0, 0, 0, 1])
+			else:
+				sim_target_joint_positions = slider_values
+
 			# Read the simulated robot's joint angles
 			sim_joint_positions = []
 			for idx, joint_id in enumerate(joint_ids):
@@ -100,30 +106,35 @@ def main(argv):
 			sim_joint_positions = np.array(sim_joint_positions)
 			
 			# If IK is enabled, update joint angles based off of goal XYZ position
-			ret = inverse_kinematics.calculate_inverse_kinematics(xyz, sim_joint_positions[:3])
-			if ret is not None:
-				enable = True
-				# Wraps angles between -pi, pi
-				sim_target_joint_positions = np.arctan2(np.sin(ret), np.cos(ret))
+			if FLAGS.ik:
+				ret = inverse_kinematics.calculate_inverse_kinematics(xyz, sim_joint_positions[:3])
+				if ret is not None:
+					enable = True
+					# Wraps angles between -pi, pi
+					sim_target_joint_positions = np.arctan2(np.sin(ret), np.cos(ret))
 
-				# Double check that the angles are a correct solution before sending anything to the real robot
-				# If the error between the goal foot position and the position of the foot obtained from the IK solution is too large,
-				# don't set the joint angles of the robot to the angles obtained from IK 
-				pos = forward_kinematics.fk_foot(sim_target_joint_positions[:3])[:3,3]
-				# x = current - (.1 - distance/100)
-				# y = -.0335
-				# z = sqrt((0.1)**2 - x**2)+0.13 in meters
-				xyz = np.array([pos[0] - (0.1-ultrasonic.distance()), -0.0335, np.sqrt((0.1)**2 - pos[0]**2) + 0.13])
-				
-				if np.linalg.norm(np.asarray(pos) - xyz) > 0.05:
-					sim_target_joint_positions = np.zeros_like(sim_target_joint_positions)
-					if flags.FLAGS.set_joint_positions:
-						sim_target_joint_positions = np.array(flags.FLAGS.set_joint_positions, dtype=np.float32)
-					print("Prevented operation on real robot as inverse kinematics solution was not correct")
+					# Double check that the angles are a correct solution before sending anything to the real robot
+					# If the error between the goal foot position and the position of the foot obtained from the IK solution is too large,
+					# don't set the joint angles of the robot to the angles obtained from IK 
+					pos = forward_kinematics.fk_foot(sim_target_joint_positions[:3])[:3,3]
+					# x = current - (.1 - distance/100)
+					# y = -.0335
+					# z = sqrt((0.1)**2 - x**2)+0.13 in meters
+					#xyz = np.array([-pos[0] + (0.1-ultrasonic.distance()/100), -0.0335, np.sqrt((0.1)**2 - pos[0]**2) + 0.13])
+					xyz = np.array([.06, .15, .15])
+					
+					
+					
+					if np.linalg.norm(np.asarray(pos) - xyz) > 0.05:
+						sim_target_joint_positions = np.zeros_like(sim_target_joint_positions)
+						if flags.FLAGS.set_joint_positions:
+							sim_target_joint_positions = np.array(flags.FLAGS.set_joint_positions, dtype=np.float32)
+						print("Prevented operation on real robot as inverse kinematics solution was not correct")
 
 			# If real-to-sim, update the simulated robot's joint angles based on the real robot's joint angles
-			sim_target_joint_positions = reacher_real.get_joint_positions()
-			sim_target_joint_positions[1] *= -1
+			if real_to_sim:
+				sim_target_joint_positions = reacher_real.get_joint_positions()
+				sim_target_joint_positions[1] *= -1
 
 			# Set the simulated robot's joint positions to sim_target_joint_positions
 			for idx, joint_id in enumerate(joint_ids):
@@ -134,7 +145,18 @@ def main(argv):
 					sim_target_joint_positions[idx],
 					force=2.
 				)
-			real_joint_positions = reacher_real.get_joint_positions() # run on robot
+
+			# If sim-to-real, update the real robot's joint angles based on the simulated robot's joint angle
+			if sim_to_real:
+				target_joint_positions = sim_joint_positions.copy()
+				target_joint_positions[1] *= -1
+				reacher_real.set_joint_positions(target_joint_positions)
+			
+			
+			# Obtain the real robot's joint angles
+			if run_on_robot:
+				real_joint_positions = reacher_real.get_joint_positions()
+
 
 			# Get the calculated positions of each joint and the end effector
 			shoulder_pos = forward_kinematics.fk_shoulder(sim_joint_positions[:3])[:3,3]
