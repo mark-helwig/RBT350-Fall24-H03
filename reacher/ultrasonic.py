@@ -20,7 +20,7 @@ def distance():
         distances[-1] = distance
     
     distance = statistics.mode(distances)
-    print(distance)
+    print(distance/100)
     return distance/100
 
 # gets the most recent distance point from the object

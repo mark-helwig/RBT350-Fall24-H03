@@ -18,7 +18,7 @@ def ik_cost(end_effector_pos, guess):
 def calculate_jacobian_FD(joint_angles, delta):
     J = np.zeros((3, 3))
     current_pos = forward_kinematics.fk_foot(joint_angles)[0:3, 3]
-    for i in range(3):
+    for i in range(1,3):
         joint_angles[i] += delta
         perturbed_pos = forward_kinematics.fk_foot(joint_angles)[0:3, 3]
         J[:, i] = (perturbed_pos - current_pos) / delta

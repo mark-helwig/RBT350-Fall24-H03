@@ -79,7 +79,10 @@ def main(argv):
 			force=2.
 			)
 
-
+	run_once = False
+	xyz = forward_kinematics.fk_foot([0,0,0])[:3,3]
+	print('xyz',xyz)
+	a = 0
 	# Main loop
 	while (True):
 
@@ -89,12 +92,18 @@ def main(argv):
 			counter += 1
 
 			# Read the slider values
+			distance_mes = ultrasonic.distance()
+			if distance_mes > 0.1:
+				print('target too far')
 			try:
 				slider_values = np.array([p.readUserDebugParameter(id) for id in param_ids])
 			except:
 				pass
 			if FLAGS.ik:
-				xyz = slider_values
+				#xyz = slider_values
+				# if not run_once:
+				# 	run_once = True
+				# 	xyz = slider_values
 				p.resetBasePositionAndOrientation(target_sphere_id, posObj=xyz, ornObj=[0, 0, 0, 1])
 			else:
 				sim_target_joint_positions = slider_values
@@ -107,24 +116,17 @@ def main(argv):
 			
 			# If IK is enabled, update joint angles based off of goal XYZ position
 			if FLAGS.ik:
+				
+				# ret is joint angles
 				ret = inverse_kinematics.calculate_inverse_kinematics(xyz, sim_joint_positions[:3])
 				if ret is not None:
 					enable = True
-					# Wraps angles between -pi, pi
 					sim_target_joint_positions = np.arctan2(np.sin(ret), np.cos(ret))
-
-					# Double check that the angles are a correct solution before sending anything to the real robot
-					# If the error between the goal foot position and the position of the foot obtained from the IK solution is too large,
-					# don't set the joint angles of the robot to the angles obtained from IK 
 					pos = forward_kinematics.fk_foot(sim_target_joint_positions[:3])[:3,3]
-					# x = current - (.1 - distance/100)
-					# y = -.0335
-					# z = sqrt((0.1)**2 - x**2)+0.13 in meters
-					#xyz = np.array([-pos[0] + (0.1-ultrasonic.distance()/100), -0.0335, np.sqrt((0.1)**2 - pos[0]**2) + 0.13])
-					xyz = np.array([.06, .15, .15])
-					
-					
-					
+					xyz = np.array([xyz[0] + (-.002 if distance_mes > 0.1 else .002 if distance_mes < 0.1 else 0), 0.0335, np.sqrt(abs((0.1)**2 - (xyz[0] + (-.002 if distance_mes > 0.1 else .002 if distance_mes < 0.1 else 0) )**2)) + 0.13])
+					print('xyz',xyz)
+					# if the position that we want to be at and the position of the calculated foot position are too far apart, 
+					# don't set the joint angles of the robot to the angles obtained from IK
 					if np.linalg.norm(np.asarray(pos) - xyz) > 0.05:
 						sim_target_joint_positions = np.zeros_like(sim_target_joint_positions)
 						if flags.FLAGS.set_joint_positions:
@@ -145,6 +147,18 @@ def main(argv):
 					sim_target_joint_positions[idx],
 					force=2.
 				)
+
+			# sim_joint_positions = []
+			# for idx, joint_id in enumerate(joint_ids):
+			# 	sim_joint_positions.append(p.getJointState(reacher_sim, joint_id)[0])
+			# sim_joint_positions = np.array(sim_joint_positions)
+
+			# if (distance_mes < 0.1 and abs(a + .1) < np.pi/2):
+			# 	a = a + .1
+			# elif (distance_mes > 0.1 and abs(a - .1) < np.pi/2):
+			# 	a = a - .1
+
+			# sim_joint_positions = [0,a,-a]
 
 			# If sim-to-real, update the real robot's joint angles based on the simulated robot's joint angle
 			if sim_to_real:
